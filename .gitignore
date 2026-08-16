@@ -1,0 +1,59 @@
+# ============================================
+# GLOBAL
+# ============================================
+node_modules/
+*.zip
+*.m4a
+*.mp3
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.log
+logs/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ============================================
+# MOBILE APP (Next.js)
+# ============================================
+mobile/node_modules/
+mobile/.next/
+mobile/out/
+mobile/dist/
+mobile/*.tsbuildinfo
+mobile/next-env.d.ts
+mobile/public/sw.js
+mobile/public/sw.js.map
+mobile/public/workbox-*.js
+mobile/public/workbox-*.js.map
+
+# ============================================
+# DESKTOP APP (Python)
+# ============================================
+desktop/venv/
+desktop/__pycache__/
+desktop/*.py[cod]
+desktop/*$py.class
+desktop/*.so
+desktop/.Python
+desktop/build/
+desktop/dist/
+desktop/*.egg-info/
+desktop/.eggs/
+desktop/*.manifest
+desktop/*.spec
+desktop/.pytest_cache/
+desktop/.coverage
+desktop/htmlcov/
+desktop/.tox/
+desktop/.env
+
+# Binários
+desktop/ffmpeg.exe
+desktop/ffprobe.exe
+desktop/*.dll
+desktop/*.exe
