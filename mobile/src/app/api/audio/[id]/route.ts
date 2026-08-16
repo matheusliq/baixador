@@ -148,9 +148,9 @@ async function getAudioUrl(videoId: string): Promise<string | null> {
       });
       ytDlp.on('error', () => resolve(null));
       setTimeout(() => {
-        ytDlp.kill();
+        try { ytDlp.kill(); } catch (e) {}
         resolve(null);
-      }, 10000);
+      }, 1500);
     });
   } catch (e) {
     return null;
