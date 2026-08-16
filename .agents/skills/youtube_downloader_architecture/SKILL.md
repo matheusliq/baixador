@@ -1,6 +1,6 @@
 ---
 name: youtube_downloader_architecture
-description: Padrões arquiteturais para o ecossistema Baixador de Músicas (Proxy de Streaming de Áudio, Proxy de Thumbnails anti-preta, Resiliência Tripla de Busca Serverless, PWA Next.js, Build PyInstaller e Fallbacks de Prerender na Vercel).
+description: Padrões arquiteturais para o ecossistema Baixador de Músicas (Proxy de Streaming de Áudio sem Python, Proxy de Thumbnails anti-preta, Cookie SOCS Consent Bypass para Busca, PWA Next.js, Build PyInstaller e Fallbacks de Prerender na Vercel).
 ---
 
 # Padrões Arquiteturais - Baixador de Músicas
@@ -15,9 +15,9 @@ Este documento registra as soluções definitivas adotadas para o projeto **Baix
   - O servidor valida o tamanho em bytes da resposta (`byteLength > 1000`) para filtrar imagens pretas de erro do YouTube.
   - Retorna a imagem original com o cabeçalho `Cache-Control: public, max-age=86400`, eliminando requisições repetidas e bloqueios de Referrer/AdBlock no cliente.
 
-## 2. Proxy de Streaming de Áudio (`/api/audio/[id]`)
-- **Problema:** Redirecionar o elemento `<audio>` diretamente para URLs do YouTube gerava erros de expiração de token, bloqueio de Cross-Origin e falhas por conta de avisos em `stderr` emitidos pelo `yt-dlp`.
-- **Solução:** A rota `/api/audio/[id]` executa o `yt-dlp` via `child_process.spawn` (ignorando `stderr`) e faz o proxy do stream de bytes via `fetch` repassando o cabeçalho `Range` para o cliente.
+## 2. Proxy de Streaming de Áudio (`/api/audio/[id]`) em JS Puro (Sem Python)
+- **Problema:** Na Vercel (ambiente Serverless Node.js), a chamada `spawn('python', ...)` falha com erro `ENOENT` porque contêineres Node.js não possuem o executável do Python instalado.
+- **Solução:** A rota `/api/audio/[id]` utiliza a biblioteca 100% JavaScript/TypeScript `@distube/ytdl-core` para extrair a URL direta de stream de áudio do YouTube no próprio Node.js, mantendo um fallback seguro para Python caso a aplicação rode em máquinas locais.
 
 ## 3. Gestão de Histórico e Exclusão Simultânea
 - Exclusão de itens do Supabase remove a faixa da fila (`status = "pendente"`) e do histórico (`status = "baixado"`), permitindo ao usuário re-adicionar faixas apagadas para download posterior.
@@ -33,10 +33,6 @@ Este documento registra as soluções definitivas adotadas para o projeto **Baix
 - **Problema:** Durante a fase `next build` (prerendering estático da Vercel), se as variáveis `NEXT_PUBLIC_SUPABASE_URL` não estiverem presentes no momento da compilação, o `createClient` do Supabase lança `Error: supabaseUrl is required.` abortando o processo de build.
 - **Solução:** O arquivo `src/lib/supabase.ts` utiliza fallbacks seguros (`https://placeholder.supabase.co` e `placeholder-key`). Dessa forma o `next build` conclui com sucesso de primeira, e em tempo de execução o cliente lê as credenciais reais configuradas no painel da Vercel.
 
-## 7. Resiliência Tripla na API de Busca (`/api/search`)
-- **Problema:** Em ambientes Serverless (como Vercel Serverless Functions em datacenters AWS), a biblioteca `yt-search` pode sofrer rate-limit por IP de nuvem ou retornar erros inesperados de scraping, gerando erro 500 para o usuário.
-- **Solução:** Implementado mecanismo de resiliência em 3 níveis em `src/app/api/search/route.ts`:
-  1. Tenta a biblioteca `yt-search`.
-  2. Se falhar ou retornar vazio, aciona o `searchYouTubeDirect` Nível A (raspagem do JSON `ytInitialData` no HTML do YouTube com User-Agent de navegador real).
-  3. Se o JSON falhar, aciona o Nível B (extração direta de `videoId` via regex em HTML cru).
-  4. Caso todos falhem, retorna um array vazio (`[]`) com status HTTP 200 OK, eliminando completamente erros 500 para o usuário final.
+## 7. Bypass da Tela de Consentimento do Google (`SOCS` Cookie) na Busca (`/api/search`)
+- **Problema:** Requisições de busca originadas de datacenters de nuvem da Vercel (ex: US `iad1`) são redirecionadas pelo Google para `https://consent.youtube.com` (tela de consentimento de cookies da UE/US), fazendo requisições de raspagem retornarem HTML sem resultados e causando busca vazia ou erro 500.
+- **Solução:** Adicionado o cabeçalho `"Cookie": "SOCS=CAESEwgDEgk2OTcyMTY5MzAaAmVuIAEaBgiA_L20Bg; CONSENT=YES+cb.20210328-17-p0.en+FX+417"` nas requisições do servidor. Isso força o YouTube a ignorar a tela de consentimento e entregar os resultados reais `ytInitialData` de forma 100% consistente na Vercel.
