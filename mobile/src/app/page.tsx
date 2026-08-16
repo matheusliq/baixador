@@ -28,8 +28,30 @@ function MainContent() {
 
   const searchParams = useSearchParams();
 
+  // Helper para salvar estado local persistente
+  const saveToLocalStorage = (newQueue: Song[], newHistory: Song[]) => {
+    try {
+      localStorage.setItem("baixador_queue", JSON.stringify(newQueue));
+      localStorage.setItem("baixador_history", JSON.stringify(newHistory));
+    } catch (e) {
+      console.error("Erro LocalStorage:", e);
+    }
+  };
+
+  // 1. Carrega de imediato do LocalStorage (0ms - F5 instantâneo)
   useEffect(() => {
+    try {
+      const savedQ = localStorage.getItem("baixador_queue");
+      const savedH = localStorage.getItem("baixador_history");
+      if (savedQ) setQueue(JSON.parse(savedQ));
+      if (savedH) setHistory(JSON.parse(savedH));
+    } catch (e) {
+      console.error("Erro ao ler LocalStorage:", e);
+    }
     fetchSupabaseData();
+  }, []);
+
+  useEffect(() => {
     const shareUrl = searchParams.get("share_url");
     if (shareUrl) {
       setSearchQuery(shareUrl);
@@ -47,19 +69,23 @@ function MainContent() {
     }
   };
 
+  // 2. Busca e sincroniza com o Supabase em background sem zerar dados locais se falhar
   const fetchSupabaseData = async () => {
-    const { data, error } = await supabase
-      .from("musicas_separadas")
-      .select("*")
-      .order("created_at", { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from("musicas_separadas")
+        .select("*")
+        .order("created_at", { ascending: false });
 
-    if (error) {
-      console.error("Erro Supabase:", error);
-      return;
-    }
-    if (data) {
-      setQueue(data.filter((s: any) => s.status === "pendente"));
-      setHistory(data.filter((s: any) => s.status === "baixado"));
+      if (!error && data && data.length > 0) {
+        const q = data.filter((s: any) => s.status === "pendente");
+        const h = data.filter((s: any) => s.status === "baixado");
+        setQueue(q);
+        setHistory(h);
+        saveToLocalStorage(q, h);
+      }
+    } catch (err) {
+      console.warn("Supabase indisponível, mantendo dados locais do LocalStorage:", err);
     }
   };
 
@@ -99,27 +125,46 @@ function MainContent() {
 
   const addToQueue = async (song: Song) => {
     const newSong: Song = { ...song, status: "pendente" };
-    setQueue((prev) => [newSong, ...prev.filter((s) => s.id !== song.id)]);
 
+    // Atualiza estado local e LocalStorage imediatamente (nunca perde no F5)
+    setQueue((prevQueue) => {
+      const updatedQ = [newSong, ...prevQueue.filter((s) => s.id !== song.id)];
+      saveToLocalStorage(updatedQ, history);
+      return updatedQ;
+    });
+
+    // Sincroniza em background com Supabase
     const { id, title, thumbnail, status } = newSong;
-    const { error } = await supabase
-      .from("musicas_separadas")
-      .upsert([{ id, title, thumbnail, status }], { onConflict: "id" });
+    try {
+      const { error } = await supabase
+        .from("musicas_separadas")
+        .upsert([{ id, title, thumbnail, status }], { onConflict: "id" });
 
-    if (error) {
-      console.error("Erro ao salvar no Supabase:", error);
-      fetchSupabaseData();
+      if (error) {
+        console.error("Aviso Supabase upsert:", error);
+      }
+    } catch (e) {
+      console.warn("Erro de conexão Supabase:", e);
     }
   };
 
   const deleteSong = async (id: string) => {
-    setQueue((prev) => prev.filter((s) => s.id !== id));
-    setHistory((prev) => prev.filter((s) => s.id !== id));
+    // Atualiza estado local e LocalStorage imediatamente
+    setQueue((prevQ) => {
+      const updatedQ = prevQ.filter((s) => s.id !== id);
+      setHistory((prevH) => {
+        const updatedH = prevH.filter((s) => s.id !== id);
+        saveToLocalStorage(updatedQ, updatedH);
+        return updatedH;
+      });
+      return updatedQ;
+    });
 
-    const { error } = await supabase.from("musicas_separadas").delete().eq("id", id);
-    if (error) {
-      console.error("Erro ao deletar no Supabase:", error);
-      fetchSupabaseData();
+    // Deleta do Supabase em background
+    try {
+      await supabase.from("musicas_separadas").delete().eq("id", id);
+    } catch (e) {
+      console.warn("Erro de conexão Supabase ao deletar:", e);
     }
   };
 
