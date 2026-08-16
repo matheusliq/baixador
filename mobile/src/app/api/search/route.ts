@@ -1,6 +1,4 @@
 import { NextResponse } from "next/server";
-// @ts-ignore
-import ytSearch from "yt-search";
 
 export const dynamic = "force-dynamic";
 
@@ -12,28 +10,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Query is required" }, { status: 400 });
   }
 
-  // Nível 1: yt-search
   try {
-    const r = await ytSearch(q);
-    if (r && Array.isArray(r.videos) && r.videos.length > 0) {
-      const results = r.videos.slice(0, 10).map((video: any) => ({
-        id: video.videoId,
-        title: video.title,
-        thumbnail: video.thumbnail || video.image || `https://i.ytimg.com/vi/${video.videoId}/hqdefault.jpg`,
-        duration: video.timestamp || "",
-      }));
-      return NextResponse.json(results);
-    }
-  } catch (err) {
-    console.warn("yt-search falhou:", err);
-  }
-
-  // Nível 2 & 3: Fallback direto no HTML do YouTube
-  try {
-    const fallbackResults = await searchYouTubeDirect(q);
-    return NextResponse.json(fallbackResults);
-  } catch (fallbackErr) {
-    console.error("Fallback Search Error:", fallbackErr);
+    const results = await searchYouTubeDirect(q);
+    return NextResponse.json(results);
+  } catch (error) {
+    console.error("YouTube Search Error:", error);
     return NextResponse.json([], { status: 200 });
   }
 }
@@ -52,7 +33,7 @@ async function searchYouTubeDirect(query: string) {
   if (!res.ok) return [];
   const html = await res.text();
 
-  // Tentativa A: ytInitialData JSON
+  // Nível 1: Extração via JSON ytInitialData
   try {
     const match = html.match(/(?:ytInitialData\s*=\s*)({[\s\S]*?});\s*<\/script>/);
     if (match) {
@@ -82,12 +63,12 @@ async function searchYouTubeDirect(query: string) {
       if (results.length > 0) return results;
     }
   } catch (e) {
-    // Ignora erro de JSON e tenta Regex B
+    // Ignora erro de JSON e tenta Regex
   }
 
-  // Tentativa B: Regex em HTML cru para videoIds
+  // Nível 2: Extração via Regex no HTML cru
   const videoIdMatches = Array.from(html.matchAll(/"videoId":"([a-zA-Z0-9_-]{11})"/g));
-  const uniqueIds = Array.from(new Set(videoIdMatches.map(m => m[1])));
+  const uniqueIds = Array.from(new Set(videoIdMatches.map((m) => m[1])));
 
   return uniqueIds.slice(0, 10).map((id) => ({
     id,
