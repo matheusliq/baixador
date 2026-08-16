@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import ytdl from '@distube/ytdl-core';
 import { spawn } from 'child_process';
 
 export const dynamic = 'force-dynamic';
@@ -35,7 +36,6 @@ export async function GET(
     const rangeHeader = request.headers.get('range');
     const youtubeHeaders: Record<string, string> = {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      Accept: '*/*',
       Referer: 'https://www.youtube.com/',
     };
 
@@ -62,12 +62,8 @@ export async function GET(
       }
     });
 
-    // YouTube returns webm/opus usually when we ask for bestaudio.
-    // It's safer to let the browser figure it out or pass the original header.
     const originalType = youtubeResponse.headers.get('content-type');
     responseHeaders.set('Content-Type', originalType || 'audio/webm');
-    
-    // Ensure accept-ranges is present for seekability
     responseHeaders.set('Accept-Ranges', 'bytes');
 
     return new NextResponse(youtubeResponse.body, {
@@ -83,49 +79,43 @@ export async function GET(
   }
 }
 
-function getAudioUrl(videoId: string): Promise<string | null> {
-  return new Promise((resolve, reject) => {
-    const ytDlp = spawn('python', [
-      '-m',
-      'yt_dlp',
-      '--get-url',
-      '-f',
-      'bestaudio',
-      '--no-warnings',
-      `https://www.youtube.com/watch?v=${videoId}`,
-    ]);
+async function getAudioUrl(videoId: string): Promise<string | null> {
+  const ytUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
-    let stdout = '';
-    let stderr = '';
+  // 1. Tenta extrair via @distube/ytdl-core (100% JS puro - funciona na Vercel sem Python)
+  try {
+    const info = await ytdl.getInfo(ytUrl);
+    const format = ytdl.chooseFormat(info.formats, { quality: 'highestaudio' });
+    if (format && format.url) {
+      return format.url;
+    }
+  } catch (err) {
+    console.warn('ytdl-core falhou, tentando fallback Python...', err);
+  }
 
-    ytDlp.stdout.on('data', (data) => {
-      stdout += data.toString();
+  // 2. Fallback local Python
+  try {
+    return await new Promise((resolve) => {
+      const ytDlp = spawn('python', [
+        '-m',
+        'yt_dlp',
+        '--get-url',
+        '-f',
+        'bestaudio',
+        '--no-warnings',
+        ytUrl,
+      ]);
+
+      let stdout = '';
+      ytDlp.stdout.on('data', (data) => { stdout += data.toString(); });
+      ytDlp.on('close', () => {
+        const url = stdout.trim().split('\n').find(line => line.trim().startsWith('http'));
+        resolve(url || null);
+      });
+      ytDlp.on('error', () => resolve(null));
+      setTimeout(() => { ytDlp.kill(); resolve(null); }, 10000);
     });
-
-    ytDlp.stderr.on('data', (data) => {
-      stderr += data.toString();
-    });
-
-    ytDlp.on('close', (code) => {
-      // Ignoramos código != 0 se o stdout conter a URL válida
-      if (code !== 0) {
-        console.warn('[yt-dlp stderr ignored]:', stderr.trim());
-      }
-      const url = stdout.trim().split('\n').find(line => line.trim().startsWith('http'));
-      if (url) {
-        resolve(url);
-      } else {
-        resolve(null);
-      }
-    });
-
-    ytDlp.on('error', (err) => {
-      reject(err);
-    });
-
-    setTimeout(() => {
-      ytDlp.kill();
-      reject(new Error('Timeout ao extrair URL de áudio'));
-    }, 15000);
-  });
+  } catch (e) {
+    return null;
+  }
 }
