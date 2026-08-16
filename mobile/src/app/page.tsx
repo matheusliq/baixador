@@ -116,11 +116,17 @@ function MainContent() {
     if (error) { console.error("Erro salvar:", error); setQueue(queue.filter(s => s.id !== song.id)); }
   };
 
-  const removeFromQueue = async (id: string) => {
-    const old = [...queue];
+  const deleteSong = async (id: string) => {
+    const oldQ = [...queue];
+    const oldH = [...history];
     setQueue(queue.filter((s) => s.id !== id));
+    setHistory(history.filter((s) => s.id !== id));
     const { error } = await supabase.from("musicas_separadas").delete().eq("id", id);
-    if (error) { console.error("Erro deletar:", error); setQueue(old); }
+    if (error) { 
+      console.error("Erro deletar:", error); 
+      setQueue(oldQ); 
+      setHistory(oldH); 
+    }
   };
 
   const SongCard = ({ song, border = false }: { song: Song; border?: boolean }) => {
@@ -268,7 +274,7 @@ function MainContent() {
               : queue.map((song) => (
                 <div key={song.id} className="flex flex-col gap-2">
                   <SongCard song={song} border />
-                  <button onClick={() => removeFromQueue(song.id)}
+                  <button onClick={() => deleteSong(song.id)}
                     className="w-full py-4 rounded-xl text-xl font-bold bg-red-100 text-red-600 flex items-center justify-center gap-2 active:bg-red-200">
                     <Trash2 className="w-6 h-6" /> Excluir se errou
                   </button>
@@ -280,16 +286,29 @@ function MainContent() {
 
         {activeTab === "historico" && (
           <div className="flex flex-col gap-4">
-            <h2 className="text-xl font-bold text-gray-700 px-2">Ja passadas pro Pen Drive</h2>
+            <h2 className="text-xl font-bold text-gray-700 px-2 flex justify-between items-center">
+              Já passadas pro Pen Drive <span className="bg-gray-200 text-gray-700 px-3 py-1 rounded-full text-lg">{history.length}</span>
+            </h2>
             {history.length === 0
-              ? <div className="text-center text-xl text-gray-500 my-10 bg-white p-8 rounded-3xl shadow-sm">Nenhuma musica baixada ainda.</div>
+              ? <div className="text-center text-xl text-gray-500 my-10 bg-white p-8 rounded-3xl shadow-sm">Nenhuma música baixada ainda.</div>
               : history.map((song) => (
-                <div key={song.id} className="bg-gray-200 p-3 rounded-2xl flex items-center gap-3 opacity-70">
-                  <SongThumbnail videoId={song.id} alt={song.title} className="w-20 h-16 object-cover rounded-xl" />
-                  <div className="flex-1">
-                    <h3 className="text-base font-bold leading-tight">{song.title}</h3>
-                    <p className="text-gray-500 text-sm flex items-center gap-1 mt-1"><Download className="w-4 h-4" /> Sucesso</p>
+                <div key={song.id} className="bg-white p-3 rounded-2xl flex items-center justify-between gap-3 shadow-sm border border-gray-100">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <SongThumbnail videoId={song.id} alt={song.title} className="w-20 h-16 object-cover rounded-xl flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-base font-bold leading-tight truncate">{song.title}</h3>
+                      <p className="text-emerald-600 font-semibold text-xs flex items-center gap-1 mt-1">
+                        <CheckCircle2 className="w-4 h-4" /> Baixado com sucesso
+                      </p>
+                    </div>
                   </div>
+                  <button 
+                    onClick={() => deleteSong(song.id)}
+                    title="Excluir do histórico"
+                    className="p-3 bg-red-100 text-red-600 rounded-xl hover:bg-red-200 active:bg-red-300 transition-colors flex-shrink-0"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
                 </div>
               ))
             }

@@ -13,7 +13,7 @@ export async function GET(request: Request) {
     const r = await ytSearch(q);
     const videos = r.videos.slice(0, 10);
 
-    const results = videos.map((video) => ({
+    const results = videos.map((video: any) => ({
       id: video.videoId,
       title: video.title,
       thumbnail: video.thumbnail || video.image || `https://i.ytimg.com/vi/${video.videoId}/hqdefault.jpg`,
