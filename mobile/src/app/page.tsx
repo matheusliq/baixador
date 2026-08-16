@@ -139,13 +139,15 @@ function MainContent() {
           <div className="relative flex-shrink-0">
             <SongThumbnail videoId={song.id} alt={song.title} className="w-32 h-24 object-cover rounded-xl" />
             <button onClick={() => togglePlay(song)}
-              className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center rounded-xl active:bg-opacity-60">
-              {isThisSong && isLoadingAudio
-                ? <div className="w-10 h-10 border-4 border-white border-t-transparent rounded-full animate-spin" />
-                : isThisPlaying
-                  ? <Pause className="w-12 h-12 text-white drop-shadow" />
-                  : <Play className="w-12 h-12 text-white drop-shadow" />
-              }
+              className="absolute inset-0 bg-black/25 hover:bg-black/40 flex items-center justify-center rounded-xl transition-all group">
+              <div className="w-12 h-12 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center border border-white/30 group-active:scale-95 transition-transform">
+                {isThisSong && isLoadingAudio
+                  ? <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  : isThisPlaying
+                    ? <Pause className="w-6 h-6 text-white fill-white" />
+                    : <Play className="w-6 h-6 text-white fill-white ml-0.5" />
+                }
+              </div>
             </button>
           </div>
           <h3 className="text-base font-bold leading-tight flex-1">{song.title}</h3>
