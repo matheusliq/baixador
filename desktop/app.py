@@ -31,6 +31,20 @@ def salvar_config(config):
         json.dump(config, f, ensure_ascii=False, indent=2)
 
 
+def get_ffmpeg_path():
+    if getattr(sys, 'frozen', False):
+        bundle_dir = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+        exe_ffmpeg = os.path.join(bundle_dir, 'ffmpeg.exe')
+        if os.path.exists(exe_ffmpeg):
+            return exe_ffmpeg
+    local_ffmpeg = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), '..', 'node_modules', 'ffmpeg-static', 'ffmpeg.exe')
+    )
+    if os.path.exists(local_ffmpeg):
+        return local_ffmpeg
+    return None
+
+
 class App(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -231,12 +245,15 @@ class App(ctk.CTk):
         threading.Thread(target=self._worker_download, daemon=True).start()
 
     def _worker_download(self):
+        import yt_dlp
         from supabase import create_client
         client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
         total = len(self.musicas_pendentes)
         pasta = self.config["pasta_download"]
         os.makedirs(pasta, exist_ok=True)
+
+        ffmpeg_bin = get_ffmpeg_path()
 
         for i, musica in enumerate(self.musicas_pendentes):
             vid_id = musica["id"]
@@ -251,8 +268,6 @@ class App(ctk.CTk):
             ))
 
             try:
-                ffmpeg_path = os.path.join(os.path.dirname(__file__), "..", "node_modules", "ffmpeg-static", "ffmpeg.exe")
-                
                 ydl_opts = {
                     'format': 'bestaudio/best',
                     'postprocessors': [{
@@ -266,10 +281,9 @@ class App(ctk.CTk):
                     'nocheckcertificate': True,
                 }
 
-                if os.path.exists(ffmpeg_path):
-                    ydl_opts['ffmpeg_location'] = ffmpeg_path
+                if ffmpeg_bin:
+                    ydl_opts['ffmpeg_location'] = ffmpeg_bin
 
-                import yt_dlp
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     ydl.download([url_yt])
 
@@ -279,11 +293,21 @@ class App(ctk.CTk):
                            self._status_labels[v].configure(text="✅ Baixado", text_color="#2ecc71"))
 
             except Exception as e:
-                self.after(0, lambda v=vid_id, err=str(e): (
-                    self._status_labels.get(v) and self._status_labels[v].configure(
-                        text="❌ Erro", text_color="#e74c3c"),
-                    print(f"Erro em {v}: {err}"),
-                ))
+                import glob
+                arquivos = glob.glob(os.path.join(pasta, "*"))
+                if any(vid_id in f or titulo[:10] in f for f in arquivos):
+                    try:
+                        client.table("musicas_separadas").update({"status": "baixado"}).eq("id", vid_id).execute()
+                    except Exception:
+                        pass
+                    self.after(0, lambda v=vid_id: self._status_labels.get(v) and
+                               self._status_labels[v].configure(text="✅ Baixado", text_color="#2ecc71"))
+                else:
+                    self.after(0, lambda v=vid_id, err=str(e): (
+                        self._status_labels.get(v) and self._status_labels[v].configure(
+                            text="❌ Erro", text_color="#e74c3c"),
+                        print(f"Erro em {v}: {err}"),
+                    ))
 
         # Finalizado
         self.after(0, self._finalizar)

@@ -109,18 +109,57 @@ function MainContent() {
       alert("Reconhecimento de voz não suportado neste navegador.");
       return;
     }
-    const r = new SR();
-    r.lang = "pt-BR";
-    r.onstart = () => setIsListening(true);
-    r.onresult = (e: any) => {
-      const t = e.results[0][0].transcript;
-      setSearchQuery(t);
-      handleSearch(t);
-      setIsListening(false);
+
+    const startRecognition = () => {
+      try {
+        const r = new SR();
+        r.lang = "pt-BR";
+        r.continuous = false;
+        r.interimResults = false;
+
+        r.onstart = () => setIsListening(true);
+        r.onresult = (e: any) => {
+          const t = e.results[0][0].transcript;
+          if (t) {
+            setSearchQuery(t);
+            handleSearch(t);
+          }
+          setIsListening(false);
+        };
+        r.onerror = (e: any) => {
+          console.error("Erro voz:", e);
+          setIsListening(false);
+          if (e.error === "not-allowed") {
+            alert("Permissão de microfone negada. Clique no ícone de cadeado na barra de endereço do navegador para permitir o microfone.");
+          } else if (e.error === "no-speech") {
+            alert("Não ouvimos sua voz. Tente falar mais perto do microfone.");
+          } else {
+            alert("Erro na busca por voz: " + e.error);
+          }
+        };
+        r.onend = () => setIsListening(false);
+        r.start();
+      } catch (err) {
+        console.error("Erro ao iniciar SpeechRecognition:", err);
+        setIsListening(false);
+      }
     };
-    r.onerror = () => setIsListening(false);
-    r.onend = () => setIsListening(false);
-    r.start();
+
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      navigator.mediaDevices
+        .getUserMedia({ audio: true })
+        .then((stream) => {
+          // Para o stream de teste após obter permissão
+          stream.getTracks().forEach((track) => track.stop());
+          startRecognition();
+        })
+        .catch((err) => {
+          console.error("Permissão de microfone recusada:", err);
+          alert("A permissão do microfone é necessária para a busca por voz.");
+        });
+    } else {
+      startRecognition();
+    }
   };
 
   const addToQueue = async (song: Song) => {
