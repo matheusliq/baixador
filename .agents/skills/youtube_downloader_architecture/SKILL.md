@@ -1,6 +1,6 @@
 ---
 name: youtube_downloader_architecture
-description: Padrões arquiteturais para o ecossistema Baixador de Músicas (Proxy de Streaming de Áudio, Proxy de Thumbnails anti-preta, PWA Next.js e Build PyInstaller sem dependências).
+description: Padrões arquiteturais para o ecossistema Baixador de Músicas (Proxy de Streaming de Áudio, Proxy de Thumbnails anti-preta, PWA Next.js, Build PyInstaller e Fallbacks de Prerender na Vercel).
 ---
 
 # Padrões Arquiteturais - Baixador de Músicas
@@ -28,3 +28,7 @@ Este documento registra as soluções definitivas adotadas para o projeto **Baix
 ## 5. Build Desktop Standalone (PyInstaller)
 - O aplicativo Python é compilado através do script `desktop/build.py` com a flag `PYTHONUTF8=1` no Windows.
 - O executável `.exe` gerado em `desktop/dist/BaixadorMusicas.exe` inclui todas as dependências (CustomTkinter, Supabase, yt-dlp) e salva o arquivo de configuração de forma persistente no diretório do binário compilado.
+
+## 6. Prevenção de Erros no Prerender da Vercel (`supabaseUrl is required`)
+- **Problema:** Durante a fase `next build` (prerendering estático da Vercel), se as variáveis `NEXT_PUBLIC_SUPABASE_URL` não estiverem presentes no momento da compilação, o `createClient` do Supabase lança `Error: supabaseUrl is required.` abortando o processo de build.
+- **Solução:** O arquivo `src/lib/supabase.ts` utiliza fallbacks seguros (`https://placeholder.supabase.co` e `placeholder-key`). Dessa forma o `next build` conclui com sucesso de primeira, e em tempo de execução o cliente lê as credenciais reais configuradas no painel da Vercel.
