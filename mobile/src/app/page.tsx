@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, Suspense } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { Mic, Search, Trash2, CheckCircle2, Music, Play, Pause } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useSearchParams } from "next/navigation";
@@ -25,11 +25,6 @@ function MainContent() {
 
   const [playingSong, setPlayingSong] = useState<Song | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [played, setPlayed] = useState(0); // 0 a 1
-  const [isLoadingAudio, setIsLoadingAudio] = useState(false);
-  const [useIframeFallback, setUseIframeFallback] = useState(false);
-  const [previewError, setPreviewError] = useState<string | null>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
 
   const searchParams = useSearchParams();
 
@@ -45,56 +40,19 @@ function MainContent() {
 
   const togglePlay = (song: Song) => {
     if (playingSong?.id === song.id) {
-      if (isPlaying) {
-        if (audioRef.current && !useIframeFallback) audioRef.current.pause();
-        setIsPlaying(false);
-      } else {
-        if (audioRef.current && !useIframeFallback) audioRef.current.play().catch(console.error);
-        setIsPlaying(true);
-      }
+      setIsPlaying(!isPlaying);
     } else {
-      setIsLoadingAudio(true);
-      setPreviewError(null);
-      setPlayed(0);
-      setUseIframeFallback(false);
       setPlayingSong(song);
-
-      const audio = audioRef.current;
-      if (audio) {
-        audio.pause();
-        audio.src = `/api/audio/${song.id}`;
-        audio.load();
-      }
+      setIsPlaying(true);
     }
   };
 
-  const handleCanPlay = () => {
-    const audio = audioRef.current;
-    if (!audio || !playingSong || useIframeFallback) return;
-    audio.play()
-      .then(() => {
-        setIsPlaying(true);
-        setIsLoadingAudio(false);
-      })
-      .catch((e) => {
-        if (e.name !== "AbortError") {
-          console.warn("Play error, acionando player incorporado fallback:", e);
-          handleAudioError();
-        } else {
-          setIsLoadingAudio(false);
-        }
-      });
-  };
-
-  const handleAudioError = () => {
-    console.warn("API proxy de áudio indisponível. Ativando fallback seguro de áudio...");
-    setIsLoadingAudio(false);
-    setUseIframeFallback(true);
-    setIsPlaying(true);
-  };
-
   const fetchSupabaseData = async () => {
-    const { data, error } = await supabase.from("musicas_separadas").select("*").order("created_at", { ascending: false });
+    const { data, error } = await supabase
+      .from("musicas_separadas")
+      .select("*")
+      .order("created_at", { ascending: false });
+
     if (error) {
       console.error("Erro Supabase:", error);
       return;
@@ -176,12 +134,10 @@ function MainContent() {
             <SongThumbnail videoId={song.id} alt={song.title} className="w-32 h-24 object-cover rounded-xl" />
             <button
               onClick={() => togglePlay(song)}
-              className="absolute inset-0 m-auto w-12 h-12 bg-black/50 hover:bg-black/70 rounded-full flex items-center justify-center text-white transition-transform active:scale-95 shadow-lg"
-              title={isThisPlaying ? "Pausar" : "Ouvir prévia"}
+              className="absolute inset-0 m-auto w-12 h-12 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center text-white transition-transform active:scale-95 shadow-lg"
+              title={isThisPlaying ? "Fechar prévia" : "Ouvir prévia"}
             >
-              {isLoadingAudio && isThisSong ? (
-                <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              ) : isThisPlaying ? (
+              {isThisPlaying ? (
                 <Pause className="w-6 h-6 fill-white" />
               ) : (
                 <Play className="w-6 h-6 fill-white ml-0.5" />
@@ -199,32 +155,27 @@ function MainContent() {
           </div>
         </div>
 
-        {isThisSong && (
-          <div className="w-full">
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.001"
-              value={played || 0}
-              className="w-full h-2 rounded-lg cursor-pointer accent-blue-600 bg-gray-200 outline-none"
-              onInput={(e) => {
-                setPlayed(parseFloat((e.target as HTMLInputElement).value));
-              }}
-              onChange={(e) => {
-                const ratio = parseFloat((e.target as HTMLInputElement).value);
-                if (audioRef.current?.duration) {
-                  audioRef.current.currentTime = ratio * audioRef.current.duration;
-                }
-              }}
-            />
-            <p className="text-xs text-blue-600 font-semibold mt-1 text-center flex items-center justify-center gap-1">
-              {isLoadingAudio
-                ? "⌛ Carregando áudio..."
-                : isPlaying
-                ? "▶ Ouvindo prévia da música..."
-                : "⏸ Pausado"}
-            </p>
+        {isThisPlaying && (
+          <div className="w-full mt-1 bg-blue-50/60 p-3 rounded-2xl border border-blue-200/80 flex flex-col gap-2">
+            <div className="flex items-center justify-between px-1">
+              <span className="text-xs text-blue-700 font-bold flex items-center gap-1">
+                ▶ Tocando prévia do louvor
+              </span>
+              <button
+                onClick={() => setIsPlaying(false)}
+                className="text-xs text-red-600 font-bold hover:underline bg-red-100 px-2 py-0.5 rounded-lg"
+              >
+                Fechar prévia
+              </button>
+            </div>
+            <div className="w-full h-48 rounded-xl overflow-hidden shadow-sm bg-black">
+              <iframe
+                src={`https://www.youtube-nocookie.com/embed/${song.id}?autoplay=1&playsinline=1&controls=1`}
+                allow="autoplay; encrypted-media"
+                className="w-full h-full border-0"
+                title={song.title}
+              />
+            </div>
           </div>
         )}
       </div>
@@ -233,30 +184,6 @@ function MainContent() {
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col font-sans text-gray-900 pb-20">
-      <audio
-        ref={audioRef}
-        onCanPlay={handleCanPlay}
-        onTimeUpdate={() => {
-          const a = audioRef.current;
-          if (a && a.duration) setPlayed(a.currentTime / a.duration);
-        }}
-        onEnded={() => {
-          setIsPlaying(false);
-          setPlayed(0);
-          setPlayingSong(null);
-        }}
-        onError={handleAudioError}
-      />
-
-      {playingSong && useIframeFallback && isPlaying && (
-        <iframe
-          src={`https://www.youtube-nocookie.com/embed/${playingSong.id}?autoplay=1&enablejsapi=1&playsinline=1`}
-          allow="autoplay"
-          className="hidden"
-          title="Audio Fallback Player"
-        />
-      )}
-
       <header className="bg-blue-600 text-white p-6 shadow-md rounded-b-3xl">
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <Music className="w-8 h-8" /> Baixador do João
@@ -265,12 +192,6 @@ function MainContent() {
       </header>
 
       <main className="flex-1 p-4 flex flex-col gap-6">
-        {previewError && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-xl shadow-sm text-center font-semibold">
-            ⚠️ {previewError}
-          </div>
-        )}
-
         <div className="flex bg-white rounded-full p-1 shadow-sm">
           {(["busca", "fila", "historico"] as const).map((tab) => (
             <button
