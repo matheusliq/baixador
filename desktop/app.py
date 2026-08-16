@@ -253,32 +253,30 @@ class App(ctk.CTk):
             try:
                 ffmpeg_path = os.path.join(os.path.dirname(__file__), "..", "node_modules", "ffmpeg-static", "ffmpeg.exe")
                 
-                cmd = [
-                    sys.executable, "-m", "yt_dlp",
-                    "--extract-audio",
-                    "--audio-format", "mp3",
-                    "--audio-quality", "0",
-                    "--output", os.path.join(pasta, "%(title)s.%(ext)s"),
-                    "--no-playlist",
-                    url_yt,
-                ]
-                
-                if os.path.exists(ffmpeg_path):
-                    cmd.extend(["--ffmpeg-location", ffmpeg_path])
-                
-                resultado = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+                ydl_opts = {
+                    'format': 'bestaudio/best',
+                    'postprocessors': [{
+                        'key': 'FFmpegExtractAudio',
+                        'preferredcodec': 'mp3',
+                        'preferredquality': '192',
+                    }],
+                    'outtmpl': os.path.join(pasta, '%(title)s.%(ext)s'),
+                    'quiet': True,
+                    'no_warnings': True,
+                    'nocheckcertificate': True,
+                }
 
-                import glob
-                arquivos = glob.glob(os.path.join(pasta, f"*{titulo[:10]}*.mp3"))
-                baixou = len(arquivos) > 0 or ("Destination:" in resultado.stdout) or ("has already been downloaded" in resultado.stdout)
-                
-                if baixou:
-                    # Marca como baixado no Supabase
-                    client.table("musicas_separadas").update({"status": "baixado"}).eq("id", vid_id).execute()
-                    self.after(0, lambda v=vid_id: self._status_labels.get(v) and
-                               self._status_labels[v].configure(text="✅ Baixado", text_color="#2ecc71"))
-                else:
-                    raise Exception(resultado.stderr[:200] if resultado.stderr else "Erro desconhecido ao baixar")
+                if os.path.exists(ffmpeg_path):
+                    ydl_opts['ffmpeg_location'] = ffmpeg_path
+
+                import yt_dlp
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    ydl.download([url_yt])
+
+                # Marca como baixado no Supabase
+                client.table("musicas_separadas").update({"status": "baixado"}).eq("id", vid_id).execute()
+                self.after(0, lambda v=vid_id: self._status_labels.get(v) and
+                           self._status_labels[v].configure(text="✅ Baixado", text_color="#2ecc71"))
 
             except Exception as e:
                 self.after(0, lambda v=vid_id, err=str(e): (
