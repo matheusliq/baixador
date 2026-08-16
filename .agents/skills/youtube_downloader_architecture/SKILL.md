@@ -1,6 +1,6 @@
 ---
 name: youtube_downloader_architecture
-description: Padrões arquiteturais para o ecossistema Baixador de Músicas (Proxy de Streaming de Áudio, Proxy de Thumbnails anti-preta, Fallback de Busca Serverless, PWA Next.js, Build PyInstaller e Fallbacks de Prerender na Vercel).
+description: Padrões arquiteturais para o ecossistema Baixador de Músicas (Proxy de Streaming de Áudio, Proxy de Thumbnails anti-preta, Resiliência Tripla de Busca Serverless, PWA Next.js, Build PyInstaller e Fallbacks de Prerender na Vercel).
 ---
 
 # Padrões Arquiteturais - Baixador de Músicas
@@ -33,9 +33,10 @@ Este documento registra as soluções definitivas adotadas para o projeto **Baix
 - **Problema:** Durante a fase `next build` (prerendering estático da Vercel), se as variáveis `NEXT_PUBLIC_SUPABASE_URL` não estiverem presentes no momento da compilação, o `createClient` do Supabase lança `Error: supabaseUrl is required.` abortando o processo de build.
 - **Solução:** O arquivo `src/lib/supabase.ts` utiliza fallbacks seguros (`https://placeholder.supabase.co` e `placeholder-key`). Dessa forma o `next build` conclui com sucesso de primeira, e em tempo de execução o cliente lê as credenciais reais configuradas no painel da Vercel.
 
-## 7. Fallback Anti-Bloqueio na API de Busca (`/api/search`)
+## 7. Resiliência Tripla na API de Busca (`/api/search`)
 - **Problema:** Em ambientes Serverless (como Vercel Serverless Functions em datacenters AWS), a biblioteca `yt-search` pode sofrer rate-limit por IP de nuvem ou retornar erros inesperados de scraping, gerando erro 500 para o usuário.
-- **Solução:** Implementado mecanismo de resiliência de 2 níveis em `src/app/api/search/route.ts`:
+- **Solução:** Implementado mecanismo de resiliência em 3 níveis em `src/app/api/search/route.ts`:
   1. Tenta a biblioteca `yt-search`.
-  2. Se a biblioteca falhar ou retornar vazio, aciona o fallback `searchYouTubeDirect`, que busca diretamente o HTML do YouTube com User-Agent real de navegador e extrai os dados via JSON `ytInitialData`.
-  3. Se ambas falharem, responde com lista vazia `[]` com status HTTP 200, evitando que o frontend exiba erros 500 genéricos.
+  2. Se falhar ou retornar vazio, aciona o `searchYouTubeDirect` Nível A (raspagem do JSON `ytInitialData` no HTML do YouTube com User-Agent de navegador real).
+  3. Se o JSON falhar, aciona o Nível B (extração direta de `videoId` via regex em HTML cru).
+  4. Caso todos falhem, retorna um array vazio (`[]`) com status HTTP 200 OK, eliminando completamente erros 500 para o usuário final.

@@ -12,7 +12,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Query is required" }, { status: 400 });
   }
 
-  // 1. Tenta yt-search
+  // Nível 1: yt-search
   try {
     const r = await ytSearch(q);
     if (r && Array.isArray(r.videos) && r.videos.length > 0) {
@@ -25,10 +25,10 @@ export async function GET(request: Request) {
       return NextResponse.json(results);
     }
   } catch (err) {
-    console.warn("yt-search falhou, iniciando fallback do YouTube...", err);
+    console.warn("yt-search falhou:", err);
   }
 
-  // 2. Fallback direto extraindo ytInitialData
+  // Nível 2 & 3: Fallback direto no HTML do YouTube
   try {
     const fallbackResults = await searchYouTubeDirect(q);
     return NextResponse.json(fallbackResults);
@@ -48,34 +48,50 @@ async function searchYouTubeDirect(query: string) {
     },
   });
 
+  if (!res.ok) return [];
   const html = await res.text();
-  const match = html.match(/var ytInitialData = ({[\s\S]*?});<\/script>/);
 
-  if (!match) return [];
+  // Tentativa A: ytInitialData JSON
+  try {
+    const match = html.match(/(?:ytInitialData\s*=\s*)({[\s\S]*?});\s*<\/script>/);
+    if (match) {
+      const data = JSON.parse(match[1]);
+      const contents =
+        data?.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents?.[0]?.itemSectionRenderer?.contents || [];
 
-  const data = JSON.parse(match[1]);
-  const contents =
-    data?.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents?.[0]?.itemSectionRenderer?.contents || [];
+      const results: any[] = [];
+      for (const item of contents) {
+        if (item.videoRenderer) {
+          const v = item.videoRenderer;
+          const videoId = v.videoId;
+          const title = v.title?.runs?.[0]?.text || "Louvor";
+          const duration = v.lengthText?.simpleText || "";
 
-  const results: any[] = [];
-  for (const item of contents) {
-    if (item.videoRenderer) {
-      const v = item.videoRenderer;
-      const videoId = v.videoId;
-      const title = v.title?.runs?.[0]?.text || "Louvor";
-      const duration = v.lengthText?.simpleText || "";
-
-      if (videoId) {
-        results.push({
-          id: videoId,
-          title,
-          thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-          duration,
-        });
+          if (videoId) {
+            results.push({
+              id: videoId,
+              title,
+              thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+              duration,
+            });
+          }
+          if (results.length >= 10) break;
+        }
       }
-      if (results.length >= 10) break;
+      if (results.length > 0) return results;
     }
+  } catch (e) {
+    // Ignora erro de JSON e tenta Regex B
   }
 
-  return results;
+  // Tentativa B: Regex em HTML cru para videoIds
+  const videoIdMatches = Array.from(html.matchAll(/"videoId":"([a-zA-Z0-9_-]{11})"/g));
+  const uniqueIds = Array.from(new Set(videoIdMatches.map(m => m[1])));
+
+  return uniqueIds.slice(0, 10).map((id) => ({
+    id,
+    title: "Louvor YouTube",
+    thumbnail: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+    duration: "",
+  }));
 }
