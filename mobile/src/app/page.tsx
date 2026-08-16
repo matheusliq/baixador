@@ -201,25 +201,23 @@ function MainContent() {
 
         {isThisSong && (
           <div className="w-full">
-            {!useIframeFallback && (
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.001"
-                value={played || 0}
-                className="w-full h-2 rounded-lg cursor-pointer accent-blue-600 bg-gray-200 outline-none"
-                onInput={(e) => {
-                  setPlayed(parseFloat((e.target as HTMLInputElement).value));
-                }}
-                onChange={(e) => {
-                  const ratio = parseFloat((e.target as HTMLInputElement).value);
-                  if (audioRef.current?.duration) {
-                    audioRef.current.currentTime = ratio * audioRef.current.duration;
-                  }
-                }}
-              />
-            )}
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.001"
+              value={played || 0}
+              className="w-full h-2 rounded-lg cursor-pointer accent-blue-600 bg-gray-200 outline-none"
+              onInput={(e) => {
+                setPlayed(parseFloat((e.target as HTMLInputElement).value));
+              }}
+              onChange={(e) => {
+                const ratio = parseFloat((e.target as HTMLInputElement).value);
+                if (audioRef.current?.duration) {
+                  audioRef.current.currentTime = ratio * audioRef.current.duration;
+                }
+              }}
+            />
             <p className="text-xs text-blue-600 font-semibold mt-1 text-center flex items-center justify-center gap-1">
               {isLoadingAudio
                 ? "⌛ Carregando áudio..."
